@@ -1,3 +1,5 @@
+import sys
+import os
 import click
 from urllib.parse import urlparse
 
@@ -18,6 +20,26 @@ class URLType(click.ParamType):
             self.fail(f'Expected valid url. Got {value}: {E}', param, ctx)
 
 
+def get_default_ffmpeg():
+    if getattr(sys, 'frozen', False):
+        return None  # Let downloader handle it or set specific frozen path here
+    # Check bin directory
+    if os.path.exists(os.path.join('bin', 'ffmpeg.exe')):
+        return os.path.join('bin', 'ffmpeg.exe')
+    if os.path.exists(os.path.join('bin', 'ffmpeg')):
+        return os.path.join('bin', 'ffmpeg')
+    return './ffmpeg'
+
+def get_default_mp4decrypt():
+    if getattr(sys, 'frozen', False):
+        return None
+    if os.path.exists(os.path.join('bin', 'mp4decrypt.exe')):
+        return os.path.join('bin', 'mp4decrypt.exe')
+    if os.path.exists(os.path.join('bin', 'mp4decrypt')):
+        return os.path.join('bin', 'mp4decrypt')
+    return './mp4decrypt'
+
+
 @click.command()
 @click.option(
     '--referer', '-r',
@@ -33,8 +55,8 @@ class URLType(click.ParamType):
 )
 @click.argument('input_url', type=URLType())
 @click.argument('output_file', type=click.Path())
-@click.option("--ffmpeg-path", default='./ffmpeg', required=False, help='Path to ffmpeg executable', type=click.Path())
-@click.option("--mp4decrypt-path", default='./mp4decrypt', required=False, help='Path to mp4decrypt executable', type=click.Path())
+@click.option("--ffmpeg-path", default=get_default_ffmpeg(), required=False, help='Path to ffmpeg executable', type=click.Path())
+@click.option("--mp4decrypt-path", default=get_default_mp4decrypt(), required=False, help='Path to mp4decrypt executable', type=click.Path())
 def main(referer,
          best_quality,
          temp, 

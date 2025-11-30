@@ -1,7 +1,7 @@
 import sys
 from io import BytesIO
 from os import PathLike
-from typing import Union
+from typing import Union, List, Tuple, Dict
 from pathlib import Path
 from requests import Session
 from subprocess import Popen
@@ -29,8 +29,9 @@ class VideoDownloader:
 
         if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
             meipass_path = Path(sys._MEIPASS).resolve()
-            self.ffmpeg_path = meipass_path / 'ffmpeg'
-            self.mp4decrypt_path = meipass_path / 'mp4decrypt'
+            ext = '.exe' if sys.platform == 'win32' else ''
+            self.ffmpeg_path = meipass_path / f'ffmpeg{ext}'
+            self.mp4decrypt_path = meipass_path / f'mp4decrypt{ext}'
         else:
             self.ffmpeg_path = ffmpeg_path
             self.mp4decrypt_path = mp4decrypt_path
@@ -42,9 +43,9 @@ class VideoDownloader:
     def __del__(self):
         rmtree(self.temp_path)
 
-    def _merge_tracks(self, source_video_filepath: str | PathLike,
-                      source_audio_filepath: str | PathLike,
-                      target_filepath: str | PathLike):
+    def _merge_tracks(self, source_video_filepath: Union[str, PathLike],
+                      source_audio_filepath: Union[str, PathLike],
+                      target_filepath: Union[str, PathLike]):
         try:
             Popen((self.ffmpeg_path,
                    "-i", source_video_filepath,
@@ -54,8 +55,8 @@ class VideoDownloader:
         except FileNotFoundError:
             raise FFmpegNotFoundError('FFmpeg binary was not found at the specified path')
 
-    def _decrypt_video(self, source_filepath: str | PathLike,
-                       target_filepath: str | PathLike,
+    def _decrypt_video(self, source_filepath: Union[str, PathLike],
+                       target_filepath: Union[str, PathLike],
                        key: str):
         try:
             Popen((self.mp4decrypt_path,
@@ -107,8 +108,8 @@ class VideoDownloader:
         raise SegmentDownloadError(f'Failed to download segment {segment_url}')
 
     def _fetch_segments(self,
-                        segments_urls: list[str],
-                        filepath: str | PathLike,
+                        segments_urls: List[str],
+                        filepath: Union[str, PathLike],
                         progress_bar_label: str = ''):
         segments_urls = [seg for i, seg in enumerate(segments_urls) if i == segments_urls.index(seg)]
         with open(filepath, 'wb') as f:
@@ -119,16 +120,19 @@ class VideoDownloader:
                     self._fetch_segment(segment_url, f)
                     progress_bar.update()
 
-    def _get_segments_urls(self, resolution: tuple[int, int]) -> dict[str:list[str]]:
+    def _get_segments_urls(self, resolution: Tuple[int, int]) -> Dict[str, List[str]]:
         try:
-            return {
-                adaptation_set.mime_type: [
-                    segment_url.media for segment_url in adaptation_set.representations[
-                        [(r.width, r.height) for r in adaptation_set.representations].index(resolution)
-                        if adaptation_set.representations[0].height else 0
-                    ].segment_lists[0].segment_urls
-                ] for adaptation_set in self.mpd_master.periods[0].adaptation_sets
-            }
+            result = {}
+            for adaptation_set in self.mpd_master.periods[0].adaptation_sets:
+                resolutions = [(r.width, r.height) for r in adaptation_set.representations]
+                idx = resolutions.index(resolution) if adaptation_set.representations[0].height else 0
+                representation = adaptation_set.representations[idx]
+                base_url = representation.base_urls[0].base_url_value
+                result[adaptation_set.mime_type] = [
+                    base_url + (segment_url.media or '') 
+                    for segment_url in representation.segment_lists[0].segment_urls]
+
+            return result
         except ValueError:
             raise InvalidResolution('Invalid resolution specified')
 
@@ -138,12 +142,12 @@ class VideoDownloader:
             headers={'Referer': KINESCOPE_BASE_URL}
         ).text)
 
-    def get_resolutions(self) -> list[tuple[int, int]]:
+    def get_resolutions(self) -> List[Tuple[int, int]]:
         for adaptation_set in self.mpd_master.periods[0].adaptation_sets:
             if adaptation_set.representations[0].height:
                 return [(r.width, r.height) for r in sorted(adaptation_set.representations, key=lambda r: r.height)]
 
-    def download(self, filepath: str, resolution: tuple[int, int] = None):
+    def download(self, filepath: str, resolution: Tuple[int, int] = None):
         if not resolution:
             resolution = self.get_resolutions()[-1]
 

@@ -1,15 +1,16 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 
+import os
 from os import environ
 
 block_cipher = None
 
-ffmpeg_path = environ.get('FFMPEG_PATH')
-mp4decrypt_path = environ.get('MP4DECRYPT_PATH')
+ffmpeg_path = 'bin/ffmpeg.exe'
+mp4decrypt_path = 'bin/mp4decrypt.exe'
 
-if not (ffmpeg_path and mp4decrypt_path):
-    raise Exception('FFMPEG_PATH or MP4DECRYPT_PATH environment variables are not set')
+if not (os.path.exists(ffmpeg_path) and os.path.exists(mp4decrypt_path)):
+    raise Exception('FFMPEG_PATH or MP4DECRYPT_PATH files are not found in bin folder')
 
 a = Analysis(
     ['kinescope-dl.py'],
